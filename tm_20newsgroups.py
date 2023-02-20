@@ -42,7 +42,8 @@ number_of_features = count_vect.get_feature_names_out().shape[0]
 X_test_counts = count_vect.transform(parsed_data_test)
 
 # Create a Tsetlin Machine Autoencoder
-target_words = ['many', 'none', 'all', 'few', 'much', 'every', 'each']
+target_words = ['in', 'out', 'he', 'she', 'can',
+                'cannot', 'do', "don't", 'Jesus', 'Christ']
 clause_weight_threshold = 0
 num_examples = 1000
 clauses = 100

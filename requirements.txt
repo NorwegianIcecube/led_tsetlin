@@ -1,0 +1,5 @@
+git+https://github.com/cair/tmu.git
+scikit-learn
+numpy
+tqdm
+pandas
