@@ -14,6 +14,35 @@ print("fetching test data \n")
 data_test = fetch_20newsgroups(
     subset='test', categories=categories, shuffle=True, random_state=42)
 
+# Pre-process data
+for data_set in [data_train, data_test]:
+    temp = []
+    for i in range(len(data_set.data)):
+        # Remove all data before and including the line which includes an email address
+        a = data_set.data[i].splitlines()
+        for j in range(len(a)):
+            if 'Lines:' in a[j]:
+                a = a[j+1:]
+                break
+        data_set.data[i] = ' '.join(a)
+        data_set.data[i] = data_set.data[i].replace('!', '.')
+        data_set.data[i] = data_set.data[i].replace('?', '.')
+        data_set.data[i] = data_set.data[i].split('.')
+
+    for doc in data_set.data:
+        for sentence in doc:
+            if len(sentence) < 5:
+                continue
+            if len(sentence.split()) < 5:
+                continue
+            sentence = sentence.strip()
+            temp.append(sentence)
+
+    data_set.data = temp
+
+        
+
+
 # Create a count vectorizer
 parsed_data_train = []
 for i in range(len(data_train.data)):
@@ -41,12 +70,13 @@ number_of_features = count_vect.get_feature_names_out().shape[0]
 
 X_test_counts = count_vect.transform(parsed_data_test)
 
+
 # Create a Tsetlin Machine Autoencoder
-target_words = ['in', 'out', 'he', 'she', 'can',
-                'cannot', 'do', "don't", 'Jesus', 'Christ']
+target_words = ['in', 'out', 'he', 'she', 'can', 'cannot', 'do', "don't", 'Jesus', 'Christ']
+
 clause_weight_threshold = 0
 num_examples = 1000
-clauses = 100
+clauses = 50
 output_active = np.empty(len(target_words), dtype=np.uint32)
 for i in range(len(target_words)):
     target_word = target_words[i]
@@ -54,7 +84,7 @@ for i in range(len(target_words)):
     target_id = count_vect.vocabulary_[target_word]
     output_active[i] = target_id
 
-enc = TMAutoEncoder(number_of_clauses=clauses, T=160,
+enc = TMAutoEncoder(number_of_clauses=clauses, T=250,
                     s=5.0, output_active=output_active, accumulation=25, feature_negation=False, platform='CPU', output_balancing=True)
 
 # Train the Tsetlin Machine Autoencoder
