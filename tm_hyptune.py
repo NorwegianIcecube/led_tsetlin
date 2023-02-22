@@ -84,15 +84,15 @@ accumulation_vector = [1]
 
 for i in range(steps):
     examples_vector.append(
-        examples_vector[i] + (examples_max - examples_vector[0]) / steps)
+        examples_vector[i] + (examples_max - examples_vector[0]) // steps)
     margin_vector.append(
-        margin_vector[i] + (margin_max - margin_vector[0]) / steps)
+        margin_vector[i] + (margin_max - margin_vector[0]) // steps)
     clause_vector.append(
-        clause_vector[i] + (clause_max - clause_vector[0]) / steps)
+        clause_vector[i] + (clause_max - clause_vector[0]) // steps)
     specificity_vector.append(
         specificity_vector[i] + (specificity_max - specificity_vector[0]) / steps)
     accumulation_vector.append(
-        accumulation_vector[i] + (accumulation_max - accumulation_vector[0]) / steps)
+        accumulation_vector[i] + (accumulation_max - accumulation_vector[0]) // steps)
 
 # Set Hyperparameters
 
@@ -107,8 +107,8 @@ accumulation = 25
 epochs = 30
 
 # Create a Tsetlin Machine Autoencoder
-target_words = ['in', 'out', 'he', 'she', 'can',
-                'cannot', 'do', "don't", 'Jesus', 'Christ']
+target_words = ['in', 'out', 'he', 'she', 'Jesus', 'Christ', 'always',
+                'never', 'few', 'many', 'accept', 'trust', 'like', 'different']
 output_active = np.empty(len(target_words), dtype=np.uint32)
 for i in range(len(target_words)):
     target_word = target_words[i]
@@ -130,7 +130,7 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
                 number_of_examples=examples_vector[example_index])
         stop_training = time()
 
-        profile = np.empty((len(target_words), clauses))
+        profile = np.empty((len(target_words), clause_vector[clause_index]))
         precision = []
         recall = []
         for i in range(len(target_words)):
@@ -148,7 +148,8 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
             print("Precision: %s" % precision)
             print("Recall: %s \n" % recall)
             print("Clauses\n")
-            for j in range(clauses):
+            clause_result = []
+            for j in range(clause_vector[clause_index]):
                 print("Clause #%d " % (j), end=' ')
                 for i in range(len(target_words)):
                     print("%s: W%d:P%.2f:R%.2f " % (target_words[i], enc.get_weight(
@@ -164,6 +165,8 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
                             l.append("¬%s(%d)" % (
                                 feature_names[k-enc.clause_bank.number_of_features], enc.clause_bank.get_ta_state(j, k)))
                 print(" ∧ ".join(l))
+                clause_result.append(" ∧ ".join(l))
+
         similarity = cosine_similarity(profile)
 
         print("\nWord Similarity\n")
@@ -183,7 +186,8 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
             # append the results of the last epoch to the results.csv file
             with open('results.csv', 'a') as f:
                 writer = csv.writer(f)
-                writer.writerow([precision, recall, word_result, ])
+                writer.writerow(
+                    [word_result, precision, recall, clause_result])
 
 
 for i in steps:

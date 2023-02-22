@@ -51,7 +51,6 @@ for i in range(len(data_train.data)):
 parsed_data_test = []
 for i in range(len(data_test.data)):
     a = data_test.data[i].split()
-    a.insert(0, b)
     parsed_data_test.append(a)
 
 
@@ -77,11 +76,11 @@ margin = 80
 # Forget value
 specificity = 10.0
 accumulation = 25
-epochs = 30
+epochs = 250
 
 # Create a Tsetlin Machine Autoencoder
-target_words = ['in', 'out', 'he', 'she', 'can',
-                'cannot', 'do', "don't", 'Jesus', 'Christ']
+target_words = ['in', 'out', 'he', 'she', 'Jesus', 'Christ', 'always',
+                'never', 'few', 'many', 'accept', 'trust', 'like', 'different']
 output_active = np.empty(len(target_words), dtype=np.uint32)
 for i in range(len(target_words)):
     target_word = target_words[i]
