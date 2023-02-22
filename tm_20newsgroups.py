@@ -14,6 +14,7 @@ print("fetching test data \n")
 data_test = fetch_20newsgroups(
     subset='test', categories=categories, shuffle=True, random_state=42)
 
+
 # Pre-process data
 for data_set in [data_train, data_test]:
     temp = []
@@ -39,8 +40,6 @@ for data_set in [data_train, data_test]:
             temp.append(sentence)
 
     data_set.data = temp
-
-        
 
 
 # Create a count vectorizer
@@ -70,13 +69,18 @@ number_of_features = count_vect.get_feature_names_out().shape[0]
 
 X_test_counts = count_vect.transform(parsed_data_test)
 
-
-# Create a Tsetlin Machine Autoencoder
-target_words = ['in', 'out', 'he', 'she', 'can', 'cannot', 'do', "don't", 'Jesus', 'Christ']
-
+# Set Hyperparameters
 clause_weight_threshold = 0
 num_examples = 1000
 clauses = 50
+margin = 1200
+specificity = 10.0
+accumulation = 25
+epochs = 100
+
+# Create a Tsetlin Machine Autoencoder
+target_words = ['in', 'out', 'he', 'she', 'can',
+                'cannot', 'do', "don't", 'Jesus', 'Christ']
 output_active = np.empty(len(target_words), dtype=np.uint32)
 for i in range(len(target_words)):
     target_word = target_words[i]
@@ -84,52 +88,51 @@ for i in range(len(target_words)):
     target_id = count_vect.vocabulary_[target_word]
     output_active[i] = target_id
 
-enc = TMAutoEncoder(number_of_clauses=clauses, T=250,
-                    s=5.0, output_active=output_active, accumulation=25, feature_negation=False, platform='CPU', output_balancing=True)
+enc = TMAutoEncoder(number_of_clauses=clauses, T=margin,
+                    s=specificity, output_active=output_active, accumulation=accumulation, feature_negation=False, platform='CPU', output_balancing=True)
+
 
 # Train the Tsetlin Machine Autoencoder
 print("Starting training \n")
-for e in range(40):
+for e in range(epochs):
     start_training = time()
     enc.fit(X_train_counts, number_of_examples=num_examples)
     stop_training = time()
 
+    profile = np.empty((len(target_words), clauses))
     precision = []
-    for i in range(len(target_words)):
-        precision.append(enc.clause_precision(
-            i, True, X_train_counts, number_of_examples=500))
-
     recall = []
     for i in range(len(target_words)):
+        precision.append(enc.clause_precision(
+            i, True, X_train_counts, number_of_examples=2000))
         recall.append(enc.clause_recall(
-            i, True, X_train_counts, number_of_examples=500))
-
-    print("Epoch #%d" % (e+1))
-    print("Precision: %s" % precision)
-    print("Recall: %s \n" % recall)
-    print("Clauses\n")
-    '''
-    for j in range(clauses):
-        print("Clause #%d " % (j), end=' ')
-        for i in range(len(target_words)):
-            print("%s: W%d:P%.2f:R%.2f " % (target_words[i], enc.get_weight(i, j), precision[i][j], recall[i][j]), end=' ')
-
-        l = []
-        for k in range(enc.clause_bank.number_of_literals):
-            if enc.get_ta_action(j, k) == 1:
-                if k < enc.clause_bank.number_of_features:
-                    l.append("%s(%d)" % (feature_names[k], enc.clause_bank.get_ta_state(j, k)))
-                else:
-                    l.append("¬%s(%d)" % (feature_names[k-enc.clause_bank.number_of_features], enc.clause_bank.get_ta_state(j, k)))
-        print(" ∧ ".join(l))
-    '''
-
-    profile = np.empty((len(target_words), clauses))
-    for i in range(len(target_words)):
+            i, True, X_train_counts, number_of_examples=2000))
         weights = enc.get_weights(i)
         profile[i, :] = np.where(
             weights >= clause_weight_threshold, weights, 0)
 
+    print("Epoch #%d" % (e+1))
+
+    if e == epochs - 1:
+        print("Precision: %s" % precision)
+        print("Recall: %s \n" % recall)
+        print("Clauses\n")
+        for j in range(clauses):
+            print("Clause #%d " % (j), end=' ')
+            for i in range(len(target_words)):
+                print("%s: W%d:P%.2f:R%.2f " % (target_words[i], enc.get_weight(
+                    i, j), precision[i][j], recall[i][j]), end=' ')
+
+            l = []
+            for k in range(enc.clause_bank.number_of_literals):
+                if enc.get_ta_action(j, k) == 1:
+                    if k < enc.clause_bank.number_of_features:
+                        l.append("%s(%d)" % (
+                            feature_names[k], enc.clause_bank.get_ta_state(j, k)))
+                    else:
+                        l.append("¬%s(%d)" % (
+                            feature_names[k-enc.clause_bank.number_of_features], enc.clause_bank.get_ta_state(j, k)))
+            print(" ∧ ".join(l))
     similarity = cosine_similarity(profile)
 
     print("\nWord Similarity\n")
