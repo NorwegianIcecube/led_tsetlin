@@ -46,13 +46,11 @@ for data_set in [data_train, data_test]:
 parsed_data_train = []
 for i in range(len(data_train.data)):
     a = data_train.data[i].split()
-    a.insert(0, '<start>')
     parsed_data_train.append(a)
 
 parsed_data_test = []
 for i in range(len(data_test.data)):
     a = data_test.data[i].split()
-    b = '<start>'
     a.insert(0, b)
     parsed_data_test.append(a)
 
@@ -70,13 +68,16 @@ number_of_features = count_vect.get_feature_names_out().shape[0]
 X_test_counts = count_vect.transform(parsed_data_test)
 
 # Set Hyperparameters
+
 clause_weight_threshold = 0
-num_examples = 1000
+num_examples = 500
 clauses = 50
-margin = 1200
+# How many votes needed for action
+margin = 80
+# Forget value
 specificity = 10.0
 accumulation = 25
-epochs = 100
+epochs = 30
 
 # Create a Tsetlin Machine Autoencoder
 target_words = ['in', 'out', 'he', 'she', 'can',
@@ -91,9 +92,9 @@ for i in range(len(target_words)):
 enc = TMAutoEncoder(number_of_clauses=clauses, T=margin,
                     s=specificity, output_active=output_active, accumulation=accumulation, feature_negation=False, platform='CPU', output_balancing=True)
 
-
 # Train the Tsetlin Machine Autoencoder
 print("Starting training \n")
+
 for e in range(epochs):
     start_training = time()
     enc.fit(X_train_counts, number_of_examples=num_examples)
@@ -104,9 +105,9 @@ for e in range(epochs):
     recall = []
     for i in range(len(target_words)):
         precision.append(enc.clause_precision(
-            i, True, X_train_counts, number_of_examples=2000))
+            i, True, X_train_counts, number_of_examples=500))
         recall.append(enc.clause_recall(
-            i, True, X_train_counts, number_of_examples=2000))
+            i, True, X_train_counts, number_of_examples=500))
         weights = enc.get_weights(i)
         profile[i, :] = np.where(
             weights >= clause_weight_threshold, weights, 0)
