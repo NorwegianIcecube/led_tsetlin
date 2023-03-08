@@ -26,8 +26,9 @@ for data_set in [data_train, data_test]:
                 a = a[j+1:]
                 break
         data_set.data[i] = ' '.join(a)
-        data_set.data[i] = data_set.data[i].replace('!', '.')
-        data_set.data[i] = data_set.data[i].replace('?', '.')
+        data_set.data[i] = data_set.data[i].replace(",", " ,")
+        data_set.data[i] = data_set.data[i].replace('!', ' !')
+        data_set.data[i] = data_set.data[i].replace('?', ' ?')
         data_set.data[i] = data_set.data[i].split('.')
 
     for doc in data_set.data:
@@ -70,17 +71,17 @@ X_test_counts = count_vect.transform(parsed_data_test)
 
 clause_weight_threshold = 0
 num_examples = 500
-clauses = 50
+clauses = 100
 # How many votes needed for action
-margin = 80
+margin = 150
 # Forget value
 specificity = 10.0
 accumulation = 25
-epochs = 250
+epochs = 200
 
 # Create a Tsetlin Machine Autoencoder
-target_words = ['in', 'out', 'he', 'she', 'Jesus', 'Christ', 'always',
-                'never', 'few', 'many', 'accept', 'trust', 'like', 'different']
+target_words = ['Jesus', 'Christ',
+                'accept', 'trust', 'faith', 'religious', 'person', 'human', 'God', 'atheists']
 output_active = np.empty(len(target_words), dtype=np.uint32)
 for i in range(len(target_words)):
     target_word = target_words[i]
@@ -104,9 +105,9 @@ for e in range(epochs):
     recall = []
     for i in range(len(target_words)):
         precision.append(enc.clause_precision(
-            i, True, X_train_counts, number_of_examples=500))
+            i, True, X_train_counts, number_of_examples=num_examples))
         recall.append(enc.clause_recall(
-            i, True, X_train_counts, number_of_examples=500))
+            i, True, X_train_counts, number_of_examples=num_examples))
         weights = enc.get_weights(i)
         profile[i, :] = np.where(
             weights >= clause_weight_threshold, weights, 0)
@@ -141,7 +142,7 @@ for e in range(epochs):
         print(target_words[i], end=': ')
         sorted_index = np.argsort(-1*similarity[i, :])
         for j in range(1, len(target_words)):
-            print("%s(%.2f) " % (
+            print("%s(%.2f) " z % (
                 target_words[sorted_index[j]], similarity[i, sorted_index[j]]), end=' ')
         print()
 

@@ -3,7 +3,9 @@ from sklearn.datasets import fetch_20newsgroups
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from tmu.models.autoencoder.autoencoder import TMAutoEncoder
+import pandas as pd
 from time import time
+from tqdm import tqdm
 
 # Load data
 categories = ['alt.atheism', 'soc.religion.christian', 'talk.religion.misc']
@@ -26,8 +28,9 @@ for data_set in [data_train, data_test]:
                 a = a[j+1:]
                 break
         data_set.data[i] = ' '.join(a)
-        data_set.data[i] = data_set.data[i].replace('!', '.')
-        data_set.data[i] = data_set.data[i].replace('?', '.')
+        data_set.data[i] = data_set.data[i].replace(",", " ,")
+        data_set.data[i] = data_set.data[i].replace('!', ' !')
+        data_set.data[i] = data_set.data[i].replace('?', ' ?')
         data_set.data[i] = data_set.data[i].split('.')
 
     for doc in data_set.data:
@@ -51,7 +54,6 @@ for i in range(len(data_train.data)):
 parsed_data_test = []
 for i in range(len(data_test.data)):
     a = data_test.data[i].split()
-    a.insert(0, b)
     parsed_data_test.append(a)
 
 
@@ -104,11 +106,12 @@ margin = 80
 # Forget value
 specificity = 10.0
 accumulation = 25
-epochs = 30
+epochs = 15
 
 # Create a Tsetlin Machine Autoencoder
-target_words = ['in', 'out', 'he', 'she', 'Jesus', 'Christ', 'always',
-                'never', 'few', 'many', 'accept', 'trust', 'like', 'different']
+target_words = ['Jesus', 'Christ',
+                'accept', 'trust', 'faith', 'religious', 'person', 'human', 'God', 'atheists']
+
 output_active = np.empty(len(target_words), dtype=np.uint32)
 for i in range(len(target_words)):
     target_word = target_words[i]
@@ -116,14 +119,19 @@ for i in range(len(target_words)):
     target_id = count_vect.vocabulary_[target_word]
     output_active[i] = target_id
 
+df = pd.DataFrame(columns=['words', 'clauses', 'examples',
+                  'margin', 'clause', 'specificity', 'accumulation'])
+df.to_csv('results.csv', index=False, header=False, mode='w')
+
 
 def train(example_index, margin_index, clause_index, specificity_index, accumulation_index):
     enc = TMAutoEncoder(number_of_clauses=clause_vector[clause_index], T=margin_vector[margin_index],
                         s=specificity_vector[specificity_index], output_active=output_active, accumulation=accumulation_vector[accumulation_index], feature_negation=False, platform='CPU', output_balancing=True)
+    print(
+        f"hyperparameters: \n examples: {examples_vector[example_index]} margin: {margin_vector[margin_index]} clauses: {clause_vector[clause_index]} specificity: {specificity_vector[specificity_index]} accumulation: {accumulation_vector[accumulation_index]}")
 
     # Train the Tsetlin Machine Autoencoder
     print("Starting training \n")
-
     for e in range(epochs):
         start_training = time()
         enc.fit(X_train_counts,
@@ -135,9 +143,9 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
         recall = []
         for i in range(len(target_words)):
             precision.append(enc.clause_precision(
-                i, True, X_train_counts, number_of_examples=500))
+                i, True, X_train_counts, number_of_examples=num_examples))
             recall.append(enc.clause_recall(
-                i, True, X_train_counts, number_of_examples=500))
+                i, True, X_train_counts, number_of_examples=num_examples))
             weights = enc.get_weights(i)
             profile[i, :] = np.where(
                 weights >= clause_weight_threshold, weights, 0)
@@ -170,29 +178,30 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
         similarity = cosine_similarity(profile)
 
         print("\nWord Similarity\n")
-        word_result = []
+        word_result = ""
         for i in range(len(target_words)):
             print(target_words[i], end=': ')
             sorted_index = np.argsort(-1*similarity[i, :])
+            word_result += "\n" + target_words[i] + ": "
             for j in range(1, len(target_words)):
                 print("%s(%.2f) " % (
                     target_words[sorted_index[j]], similarity[i, sorted_index[j]]), end=' ')
-                word_result.append(
-                    target_words[sorted_index[j]], similarity[i, sorted_index[j]])
+                word_result += f"{target_words[sorted_index[j]]}: {similarity[i, sorted_index[j]]}, "
+
             print()
 
         print("\nTraining Time: %.2f" % (stop_training - start_training))
         if e == epochs - 1:
-            # append the results of the last epoch to the results.csv file
-            with open('results.csv', 'a') as f:
-                writer = csv.writer(f)
-                writer.writerow(
-                    [word_result, precision, recall, clause_result])
+            temp_data = pd.DataFrame(data=[word_result, f"Number of examples: {examples_vector[example_index]}", f"Margin: {margin_vector[margin_index]}",
+                                     f"Clauses: {clause_vector[clause_index]}", f"Specificity: {specificity_vector[specificity_index]}", f"Accumulation: {accumulation_vector[accumulation_index]}"])
+            temp_data.to_csv('results.csv', index=False,
+                             header=False, mode='a')
 
 
-for i in steps:
-    train(i, 4, 4, 4, 4)
-    train(4, i, 4, 4, 4)
-    train(4, 4, i, 4, 4)
-    train(4, 4, 4, i, 4)
-    train(4, 4, 4, 4, i)
+middle = steps // 2
+for i in range(steps):
+    train(i, middle, middle, middle, middle)
+    train(middle, i, middle, middle, middle)
+    train(middle, middle, i, middle, middle)
+    train(middle, middle, middle, i, middle)
+    train(middle, middle, middle, middle, i)
