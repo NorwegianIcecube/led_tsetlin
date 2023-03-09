@@ -70,17 +70,18 @@ number_of_features = count_vect.get_feature_names_out().shape[0]
 X_test_counts = count_vect.transform(parsed_data_test)
 
 # Create Hyperparameter vectors
-examples_max = 2000
+examples_max = 1000
 margin_max = 500
 clause_max = 215
 specificity_max = 20.0
 accumulation_max = 50
-steps = 8
+steps = 32
 
 examples_vector = [100]
 margin_vector = [50]
 clause_vector = [15]
-specificity_vector = [1.0]
+# Setting specificity to 1 makes the epochs take 400+ seconds
+specificity_vector = [5.0]
 accumulation_vector = [1]
 
 
@@ -143,9 +144,9 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
         recall = []
         for i in range(len(target_words)):
             precision.append(enc.clause_precision(
-                i, True, X_train_counts, number_of_examples=num_examples))
+                i, True, X_train_counts, number_of_examples=examples_vector[example_index]))
             recall.append(enc.clause_recall(
-                i, True, X_train_counts, number_of_examples=num_examples))
+                i, True, X_train_counts, number_of_examples=examples_vector[example_index]))
             weights = enc.get_weights(i)
             profile[i, :] = np.where(
                 weights >= clause_weight_threshold, weights, 0)
@@ -156,6 +157,7 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
             print("Precision: %s" % precision)
             print("Recall: %s \n" % recall)
             print("Clauses\n")
+            """
             clause_result = []
             for j in range(clause_vector[clause_index]):
                 print("Clause #%d " % (j), end=' ')
@@ -174,6 +176,7 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
                                 feature_names[k-enc.clause_bank.number_of_features], enc.clause_bank.get_ta_state(j, k)))
                 print(" ∧ ".join(l))
                 clause_result.append(" ∧ ".join(l))
+        """
 
         similarity = cosine_similarity(profile)
 
@@ -200,8 +203,9 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
 
 middle = steps // 2
 for i in range(steps):
-    train(i, middle, middle, middle, middle)
-    train(middle, i, middle, middle, middle)
-    train(middle, middle, i, middle, middle)
-    train(middle, middle, middle, i, middle)
-    train(middle, middle, middle, middle, i)
+    if i != middle:
+        train(i, middle, middle, middle, middle)
+        train(middle, i, middle, middle, middle)
+        train(middle, middle, i, middle, middle)
+        train(middle, middle, middle, i, middle)
+        train(middle, middle, middle, middle, i)
