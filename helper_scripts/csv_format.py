@@ -14,25 +14,43 @@ def format_csv(file_name):
         for j, row in enumerate(reader):
             if j % 6 == 0:
                 i += 1
-
+            if row[0].count(":") > 1:
+                sorted_data = sort_data(row)
+            else:
+                sorted_data = row
             if i % 5 == 0:
-                accumulation.append(row)
+                accumulation.append(sorted_data)
             elif i % 5 == 1:
-                example.append(row)
+                example.append(sorted_data)
             elif i % 5 == 2:
-                margin.append(row)
+                margin.append(sorted_data)
             elif i % 5 == 3:
-                clause.append(row)
+                clause.append(sorted_data)
             elif i % 5 == 4:
-                specificity.append(row)
-
+                specificity.append(sorted_data)
     with open("results_ordered.csv", 'w') as f:
         writer = csv.writer(f)
-        writer.writerow(example)
-        writer.writerow(margin)
-        writer.writerow(clause)
-        writer.writerow(specificity)
-        writer.writerow(accumulation)
+        writer.writerow("")
+
+        write_section(example)
+        write_section(margin)
+        write_section(clause)
+        write_section(specificity)
+        write_section(accumulation)
+
+
+def write_section(section):
+    with open("results_ordered.csv", mode='a') as f:
+        writer = csv.writer(f)
+        for item in section:
+            writer.writerow(item)
+
+
+def sort_data(row):
+    data = row[0].split("\n")
+    data = data[1::]
+
+    return data
 
 
 if __name__ == "__main__":

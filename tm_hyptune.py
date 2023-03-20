@@ -5,7 +5,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 from tmu.models.autoencoder.autoencoder import TMAutoEncoder
 import pandas as pd
 from time import time
-from tqdm import tqdm
 
 # Load data
 categories = ['alt.atheism', 'soc.religion.christian', 'talk.religion.misc']
@@ -195,8 +194,9 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
 
         print("\nTraining Time: %.2f" % (stop_training - start_training))
         if e == epochs - 1:
-            temp_data = pd.DataFrame(data=[word_result, f"Number of examples: {examples_vector[example_index]}", f"Margin: {margin_vector[margin_index]}",
-                                     f"Clauses: {clause_vector[clause_index]}", f"Specificity: {specificity_vector[specificity_index]}", f"Accumulation: {accumulation_vector[accumulation_index]}"])
+            temp_data = pd.DataFrame(data=[word_result, f"Precision: {precision}", f"Recall: {recall}", f"Number of examples: {examples_vector[example_index]}", f"Margin: {margin_vector[margin_index]}",
+                                     f"Clauses: {clause_vector[clause_index]}", f"Specificity: {specificity_vector[specificity_index]}",
+                                           f"Accumulation: {accumulation_vector[accumulation_index]}"])
             temp_data.to_csv('results.csv', index=False,
                              header=False, mode='a')
 
