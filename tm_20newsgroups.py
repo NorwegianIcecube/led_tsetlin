@@ -142,7 +142,7 @@ for e in range(epochs):
         print(target_words[i], end=': ')
         sorted_index = np.argsort(-1*similarity[i, :])
         for j in range(1, len(target_words)):
-            print("%s(%.2f) " z % (
+            print("%s(%.2f) " % (
                 target_words[sorted_index[j]], similarity[i, sorted_index[j]]), end=' ')
         print()
 
