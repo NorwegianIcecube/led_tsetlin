@@ -14,6 +14,8 @@ print("fetching test data \n")
 data_test = fetch_20newsgroups(
     subset='test', categories=categories, shuffle=True, random_state=42)
 
+target_words = ['God', 'Jesus']
+
 
 def index_sentence(sentence, keyword):
     words = sentence.split()
@@ -23,11 +25,12 @@ def index_sentence(sentence, keyword):
         if words[i] == keyword:
             found_index = i
             break
-    for i in range(len(words)):
-        index += f"{words[i]}:{i - found_index} "
-    print(index)
     if found_index == 0:
         return sentence
+    else:
+        for i in range(len(words)):
+            index += f"{words[i]}:{i - found_index} "
+    print(index)
     return index[:-1]
 
 
@@ -54,10 +57,11 @@ for data_set in [data_train, data_test]:
             if len(sentence.split()) < 5:
                 continue
             sentence = sentence.strip()
-            temp.append(sentence)
+            for i in range(len(target_words)):
+                indexed_words = index_sentence(sentence, target_words[i])
+            temp.append(indexed_words)
 
     data_set.data = temp
-
 
 # Create a count vectorizer
 parsed_data_train = []
@@ -96,8 +100,7 @@ accumulation = 25
 epochs = 200
 
 # Create a Tsetlin Machine Autoencoder
-target_words = ['Jesus', 'Christ',
-                'accept', 'trust', 'faith', 'religious', 'person', 'human', 'God', 'atheists']
+
 output_active = np.empty(len(target_words), dtype=np.uint32)
 for i in range(len(target_words)):
     target_word = target_words[i]
