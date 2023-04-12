@@ -44,20 +44,6 @@ for data_set in [data_train, data_test]:
     data_set.data = temp
 
 
-def index_sentence(sentence, keyword):
-    words = sentence.split()
-    index = ""
-    found_keyword = False
-    for i in range(len(words)):
-        if words[i] == keyword:
-            found_keyword = True
-        if found_keyword:
-            index += f"{words[i]}:{i - len(words)} "
-        else:
-            index += f"{words[i]}:{i} "
-    return index[:-1]
-
-
 # Create a count vectorizer
 parsed_data_train = []
 for i in range(len(data_train.data)):
