@@ -14,6 +14,20 @@ print("fetching test data \n")
 data_test = fetch_20newsgroups(
     subset='test', categories=categories, shuffle=True, random_state=42)
 
+# Function to index a sentence based on a keyword
+def index_sentence(sentence, keyword):
+    words = sentence.split()
+    index = {}
+    found_keyword = False
+    for i in range(len(words)):
+        if words[i] == keyword:
+            found_keyword = True
+        if found_keyword:
+            index[words[i]] = i - len(words)
+        else:
+            index[words[i]] = i
+    return index
+
 
 # Pre-process data
 for data_set in [data_train, data_test]:
