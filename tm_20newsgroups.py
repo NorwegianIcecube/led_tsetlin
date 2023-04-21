@@ -30,7 +30,6 @@ def index_sentence(sentence, keyword):
     else:
         for i in range(len(words)):
             index += f"{words[i]}:{i - found_index} "
-    print(index)
     return index[:-1]
 
 
@@ -45,7 +44,7 @@ for data_set in [data_train, data_test]:
                 a = a[j+1:]
                 break
         data_set.data[i] = ' '.join(a)
-        data_set.data[i] = data_set.data[i].replace(",", " ,")
+        data_set.data[i] = data_set.data[i].replace(",", "")
         data_set.data[i] = data_set.data[i].replace('!', ' !')
         data_set.data[i] = data_set.data[i].replace('?', ' ?')
         data_set.data[i] = data_set.data[i].split('.')
@@ -59,7 +58,8 @@ for data_set in [data_train, data_test]:
             sentence = sentence.strip()
             for i in range(len(target_words)):
                 indexed_words = index_sentence(sentence, target_words[i])
-            temp.append(indexed_words)
+                if indexed_words != sentence:
+                    temp.append(indexed_words)
 
     data_set.data = temp
 
@@ -97,13 +97,13 @@ margin = 150
 # Forget value
 specificity = 10.0
 accumulation = 25
-epochs = 200
+epochs = 20
 
 # Create a Tsetlin Machine Autoencoder
 
 output_active = np.empty(len(target_words), dtype=np.uint32)
 for i in range(len(target_words)):
-    target_word = target_words[i]
+    target_word = f"{target_words[i]}:0"
 
     target_id = count_vect.vocabulary_[target_word]
     output_active[i] = target_id
