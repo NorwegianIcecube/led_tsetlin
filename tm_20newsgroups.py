@@ -128,8 +128,8 @@ df = pd.DataFrame(
     ]
 )
 df.to_csv("meta.csv", index=False, header=False, mode="w")
-data = pd.DataFrame(columns=["f1 score", "precision", "recall"])
-data.to_csv("training.csv", mode="w")
+data = pd.DataFrame(columns=["epochs", "f1 score", "precision", "recall"])
+data.to_csv("training.csv", mode="w", index=False)
 
 print("Starting training \n")
 f1_list, precision_list, recall_list = [], [], []
@@ -208,9 +208,9 @@ for e in range(epochs):
     precision_list.append(avg_precision)
     recall_list.append(avg_recall)
 
-    temp = pd.DataFrame({"f1 score":[f1_score], 
-                         "precision":[avg_precision], 
-                        "recall":[avg_recall]})
+    temp = pd.DataFrame(
+        {"epochs": [e+1], "f1 score": [f1_score], "precision": [avg_precision], "recall": [avg_recall]}
+    )
     temp.to_csv("training.csv", index=False, header=False, mode="a")
 
     print("\nWord Similarity\n")
