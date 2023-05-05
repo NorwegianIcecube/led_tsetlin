@@ -4,3 +4,4 @@ numpy
 tqdm
 pandas
 tqdm
+matplotlib

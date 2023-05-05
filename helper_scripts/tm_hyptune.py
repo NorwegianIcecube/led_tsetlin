@@ -198,9 +198,28 @@ def train(examples, margin, clauses, specificity, accumulation):
 
         print("\nTraining Time: %.2f" % (stop_training - start_training))
         if e == epochs - 1:
-            temp_data = pd.DataFrame(data=[word_result, f"Precision: {precision}", f"Recall: {recall}", f"Number of examples: {examples}", f"Margin: {margin}",
-                                     f"Clauses: {clauses}", f"Specificity: {specificity}",
-                                           f"Accumulation: {accumulation}", f"Clause weight threshold: {clause_weight_threshold}"])
+            np_precision = np.concatenate(precision, axis=0)
+            np_precision = np_precision.flatten('C')
+            np_precision = np_precision[~np.isnan(np_precision)]
+            avg_precision = np.sum(np_precision) / np_precision.size
+
+            np_recall = np.concatenate(recall, axis=0)
+            np_recall = np_recall.flatten('C')
+            np_recall = np_recall[~np.isnan(np_recall)]
+            avg_recall = np.nansum(np_recall) / np_recall.size
+            f1_score = 2 * ((avg_precision * avg_recall) /
+                            (avg_precision + avg_recall))
+            temp_data = pd.DataFrame(data=[word_result,
+                                           f"Precision: {avg_precision}",
+                                           f"Recall: {avg_recall}",
+                                           f"F1 Score: {f1_score}",
+                                           f"Number of examples: {examples}",
+                                           f"Margin: {margin}",
+                                           f"Clauses: {clauses}",
+                                           f"Specificity: {specificity}",
+                                           f"Accumulation: {accumulation}",
+                                           ])
+
             temp_data.to_csv('results.csv', index=False,
                              header=False, mode='a')
 
