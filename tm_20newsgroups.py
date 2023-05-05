@@ -5,6 +5,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from tmu.models.autoencoder.autoencoder import TMAutoEncoder
 from time import time
 import pandas as pd
+import matplotlib.pyplot as plt
 
 # Load data
 categories = ["alt.atheism", "soc.religion.christian", "talk.religion.misc"]
@@ -82,9 +83,9 @@ clauses = 100
 # How many votes needed for action
 margin = 150
 # Forget value
-specificity = 10.0
+specificity = 5.0
 accumulation = 25
-epochs = 10
+epochs = 100
 
 # Create a Tsetlin Machine Autoencoder
 target_words = [
@@ -126,9 +127,12 @@ df = pd.DataFrame(
         f"accumulation: {accumulation}",
     ]
 )
-df.to_csv("training.csv", index=False, header=False, mode="w")
+df.to_csv("meta.csv", index=False, header=False, mode="w")
+data = pd.DataFrame(columns=["f1 score", "precision", "recall"])
+data.to_csv("training.csv", mode="w")
 
 print("Starting training \n")
+f1_list, precision_list, recall_list = [], [], []
 
 for e in range(epochs):
     start_training = time()
@@ -200,7 +204,13 @@ for e in range(epochs):
     avg_recall = np.nansum(np_recall) / np_recall.size
     f1_score = 2 * ((avg_precision * avg_recall) / (avg_precision + avg_recall))
 
-    temp = pd.DataFrame(data=[[f"epoch: {e + 1}", f"f1_score: {f1_score}"]])
+    f1_list.append(f1_score)
+    precision_list.append(avg_precision)
+    recall_list.append(avg_recall)
+
+    temp = pd.DataFrame({"f1 score":[f1_score], 
+                         "precision":[avg_precision], 
+                        "recall":[avg_recall]})
     temp.to_csv("training.csv", index=False, header=False, mode="a")
 
     print("\nWord Similarity\n")
@@ -217,3 +227,9 @@ for e in range(epochs):
         print()
 
     print("\nTraining Time: %.2f" % (stop_training - start_training))
+plt.plot(f1_list, label="f1_score")
+plt.plot(precision_list, label="precision")
+plt.plot(recall_list, label="recall")
+plt.xlabel("Epochs")
+plt.legend()
+plt.show()

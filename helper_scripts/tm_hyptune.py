@@ -123,8 +123,8 @@ for i in range(len(target_words)):
     target_id = count_vect.vocabulary_[target_word]
     output_active[i] = target_id
 
-df = pd.DataFrame(columns=['words', 'clauses', 'examples',
-                  'margin', 'clause', 'specificity', 'accumulation'])
+df = pd.DataFrame(columns=['Precision', 'Recall', 'F1 Score','Number of examples', 'Margin',
+                  'Clauses', 'Specificity', 'Accumulation', 'Word results'])
 df.to_csv('results.csv', index=False, header=False, mode='w')
 
 
@@ -209,16 +209,17 @@ def train(examples, margin, clauses, specificity, accumulation):
             avg_recall = np.nansum(np_recall) / np_recall.size
             f1_score = 2 * ((avg_precision * avg_recall) /
                             (avg_precision + avg_recall))
-            temp_data = pd.DataFrame(data=[word_result,
-                                           f"Precision: {avg_precision}",
-                                           f"Recall: {avg_recall}",
-                                           f"F1 Score: {f1_score}",
-                                           f"Number of examples: {examples}",
-                                           f"Margin: {margin}",
-                                           f"Clauses: {clauses}",
-                                           f"Specificity: {specificity}",
-                                           f"Accumulation: {accumulation}",
-                                           ])
+            temp_data = pd.DataFrame({
+                            "Precision": avg_precision,
+                            "Recall": avg_recall,
+                            "F1 Score": f1_score,
+                            "Number of examples": examples,
+                            "Margin": margin,
+                            "Clauses": clauses,
+                            "Specificity": specificity,
+                            "Accumulation": accumulation,
+                            "Word results": [word_result]
+                                           })
 
             temp_data.to_csv('results.csv', index=False,
                              header=False, mode='a')
