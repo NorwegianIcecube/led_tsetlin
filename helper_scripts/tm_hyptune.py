@@ -1,3 +1,4 @@
+from __future__ import annotations
 import numpy as np
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.feature_extraction.text import CountVectorizer
@@ -5,6 +6,9 @@ from sklearn.metrics.pairwise import cosine_similarity
 from tmu.models.autoencoder.autoencoder import TMAutoEncoder
 import pandas as pd
 from time import time
+from typing import Iterable, Any
+from itertools import product
+
 
 # Load data
 categories = ['alt.atheism', 'soc.religion.christian', 'talk.religion.misc']
@@ -48,12 +52,12 @@ for data_set in [data_train, data_test]:
 parsed_data_train = []
 for i in range(len(data_train.data)):
     a = data_train.data[i].split()
-    parsed_data_train.append(a)
+    parsed_data_train.append(map(str.lower, a))
 
 parsed_data_test = []
 for i in range(len(data_test.data)):
     a = data_test.data[i].split()
-    parsed_data_test.append(a)
+    parsed_data_test.append(map(str.lower, a))
 
 
 def tokenizer(s):
@@ -71,17 +75,22 @@ X_test_counts = count_vect.transform(parsed_data_test)
 # Create Hyperparameter vectors
 examples_max = 1000
 margin_max = 500
-clause_max = 215
+clause_max = 250
 specificity_max = 20.0
 accumulation_max = 50
-steps = 32
+steps = 3
 
 examples_vector = [100]
 margin_vector = [50]
 clause_vector = [15]
 # Setting specificity to 1 makes the epochs take 400+ seconds
 specificity_vector = [5.0]
-accumulation_vector = [1]
+accumulation_vector = [5]
+
+
+def grid_parameters(parameters: dict[str, Iterable[Any]]) -> Iterable[dict[str, Any]]:
+    for params in product(*parameters.values()):
+        yield dict(zip(parameters.keys(), params))
 
 
 for i in range(steps):
@@ -96,21 +105,16 @@ for i in range(steps):
     accumulation_vector.append(
         accumulation_vector[i] + (accumulation_max - accumulation_vector[0]) // steps)
 
+settings = {"examples": examples_vector, "margin": margin_vector, "clauses": clause_vector,
+            "specificity": specificity_vector, "accumulation": accumulation_vector}
 # Set Hyperparameters
 
 clause_weight_threshold = 0
-num_examples = 500
-clauses = 50
-# How many votes needed for action
-margin = 80
-# Forget value
-specificity = 10.0
-accumulation = 25
 epochs = 15
 
 # Create a Tsetlin Machine Autoencoder
-target_words = ['Jesus', 'Christ',
-                'accept', 'trust', 'faith', 'religious', 'person', 'human', 'God', 'atheists']
+target_words = ['jesus', 'christ',
+                'accept', 'deny', 'trust', 'faith', 'religious', 'god', 'atheists']
 
 output_active = np.empty(len(target_words), dtype=np.uint32)
 for i in range(len(target_words)):
@@ -124,28 +128,28 @@ df = pd.DataFrame(columns=['words', 'clauses', 'examples',
 df.to_csv('results.csv', index=False, header=False, mode='w')
 
 
-def train(example_index, margin_index, clause_index, specificity_index, accumulation_index):
-    enc = TMAutoEncoder(number_of_clauses=clause_vector[clause_index], T=margin_vector[margin_index],
-                        s=specificity_vector[specificity_index], output_active=output_active, accumulation=accumulation_vector[accumulation_index], feature_negation=False, platform='CPU', output_balancing=True)
+def train(examples, margin, clauses, specificity, accumulation):
+    enc = TMAutoEncoder(number_of_clauses=clauses, T=margin,
+                        s=specificity, output_active=output_active, accumulation=accumulation, feature_negation=False, platform='CPU', output_balancing=True)
     print(
-        f"hyperparameters: \n examples: {examples_vector[example_index]} margin: {margin_vector[margin_index]} clauses: {clause_vector[clause_index]} specificity: {specificity_vector[specificity_index]} accumulation: {accumulation_vector[accumulation_index]}")
+        f"hyperparameters: \n examples: {examples} margin: {margin} clauses: {clauses} specificity: {specificity} accumulation: {accumulation}")
 
     # Train the Tsetlin Machine Autoencoder
     print("Starting training \n")
     for e in range(epochs):
         start_training = time()
         enc.fit(X_train_counts,
-                number_of_examples=examples_vector[example_index])
+                number_of_examples=examples)
         stop_training = time()
 
-        profile = np.empty((len(target_words), clause_vector[clause_index]))
+        profile = np.empty((len(target_words), clauses))
         precision = []
         recall = []
         for i in range(len(target_words)):
             precision.append(enc.clause_precision(
-                i, True, X_train_counts, number_of_examples=examples_vector[example_index]))
+                i, True, X_train_counts, number_of_examples=examples))
             recall.append(enc.clause_recall(
-                i, True, X_train_counts, number_of_examples=examples_vector[example_index]))
+                i, True, X_train_counts, number_of_examples=examples))
             weights = enc.get_weights(i)
             profile[i, :] = np.where(
                 weights >= clause_weight_threshold, weights, 0)
@@ -194,18 +198,13 @@ def train(example_index, margin_index, clause_index, specificity_index, accumula
 
         print("\nTraining Time: %.2f" % (stop_training - start_training))
         if e == epochs - 1:
-            temp_data = pd.DataFrame(data=[word_result, f"Precision: {precision}", f"Recall: {recall}", f"Number of examples: {examples_vector[example_index]}", f"Margin: {margin_vector[margin_index]}",
-                                     f"Clauses: {clause_vector[clause_index]}", f"Specificity: {specificity_vector[specificity_index]}",
-                                           f"Accumulation: {accumulation_vector[accumulation_index]}"])
+            temp_data = pd.DataFrame(data=[word_result, f"Precision: {precision}", f"Recall: {recall}", f"Number of examples: {examples}", f"Margin: {margin}",
+                                     f"Clauses: {clauses}", f"Specificity: {specificity}",
+                                           f"Accumulation: {accumulation}", f"Clause weight threshold: {clause_weight_threshold}"])
             temp_data.to_csv('results.csv', index=False,
                              header=False, mode='a')
 
 
-middle = steps // 2
-for i in range(steps):
-    if i != middle:
-        train(i, middle, middle, middle, middle)
-        train(middle, i, middle, middle, middle)
-        train(middle, middle, i, middle, middle)
-        train(middle, middle, middle, i, middle)
-        train(middle, middle, middle, middle, i)
+for parameters in grid_parameters(settings):
+    train(parameters['examples'], parameters['margin'], parameters['clauses'],
+          parameters['specificity'], parameters['accumulation'])
