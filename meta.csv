@@ -1,0 +1,6 @@
+clause_weight_threshold: 0
+num_examples: 500
+clauses: 100
+margin: 150
+specificity: 5.0
+accumulation: 25
