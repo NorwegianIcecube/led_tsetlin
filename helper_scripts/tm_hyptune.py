@@ -125,14 +125,12 @@ for i in range(len(target_words)):
 
 df = pd.DataFrame(columns=['Precision', 'Recall', 'F1 Score','Number of examples', 'Margin',
                   'Clauses', 'Specificity', 'Accumulation', 'Word results'])
-df.to_csv('results.csv', index=False, header=False, mode='w')
+df.to_csv('results.csv', index=False, mode='w')
 
 
 def train(examples, margin, clauses, specificity, accumulation):
     enc = TMAutoEncoder(number_of_clauses=clauses, T=margin,
                         s=specificity, output_active=output_active, accumulation=accumulation, feature_negation=False, platform='CPU', output_balancing=True)
-    print(
-        f"hyperparameters: \n examples: {examples} margin: {margin} clauses: {clauses} specificity: {specificity} accumulation: {accumulation}")
 
     # Train the Tsetlin Machine Autoencoder
     print("Starting training \n")
@@ -145,18 +143,19 @@ def train(examples, margin, clauses, specificity, accumulation):
         profile = np.empty((len(target_words), clauses))
         precision = []
         recall = []
-        for i in range(len(target_words)):
-            precision.append(enc.clause_precision(
-                i, True, X_train_counts, number_of_examples=examples))
-            recall.append(enc.clause_recall(
-                i, True, X_train_counts, number_of_examples=examples))
-            weights = enc.get_weights(i)
-            profile[i, :] = np.where(
-                weights >= clause_weight_threshold, weights, 0)
-
+        
         print("Epoch #%d" % (e+1))
 
         if e == epochs - 1:
+            for i in range(len(target_words)):
+                precision.append(enc.clause_precision(
+                    i, True, X_train_counts, number_of_examples=examples))
+                recall.append(enc.clause_recall(
+                    i, True, X_train_counts, number_of_examples=examples))
+                weights = enc.get_weights(i)
+                profile[i, :] = np.where(
+                    weights >= clause_weight_threshold, weights, 0)
+
             print("Precision: %s" % precision)
             print("Recall: %s \n" % recall)
             print("Clauses\n")
@@ -181,23 +180,24 @@ def train(examples, margin, clauses, specificity, accumulation):
                 clause_result.append(" ∧ ".join(l))
         """
 
-        similarity = cosine_similarity(profile)
+            similarity = cosine_similarity(profile)
 
-        print("\nWord Similarity\n")
-        word_result = ""
-        for i in range(len(target_words)):
-            print(target_words[i], end=': ')
-            sorted_index = np.argsort(-1*similarity[i, :])
-            word_result += "\n" + target_words[i] + ": "
-            for j in range(1, len(target_words)):
-                print("%s(%.2f) " % (
-                    target_words[sorted_index[j]], similarity[i, sorted_index[j]]), end=' ')
-                word_result += f"{target_words[sorted_index[j]]}: {similarity[i, sorted_index[j]]}, "
+            print("\nWord Similarity\n")
+            word_result = ""
+            for i in range(len(target_words)):
+                print(target_words[i], end=': ')
+                sorted_index = np.argsort(-1*similarity[i, :])
+                word_result += "\n" + target_words[i] + ": "
+                for j in range(1, len(target_words)):
+                    print("%s(%.2f) " % (
+                        target_words[sorted_index[j]], similarity[i, sorted_index[j]]), end=' ')
+                    word_result += f"{target_words[sorted_index[j]]}: {similarity[i, sorted_index[j]]}, "
 
-            print()
-
+                print()
+        print()
         print("\nTraining Time: %.2f" % (stop_training - start_training))
         if e == epochs - 1:
+            
             np_precision = np.concatenate(precision, axis=0)
             np_precision = np_precision.flatten('C')
             np_precision = np_precision[~np.isnan(np_precision)]
@@ -206,19 +206,21 @@ def train(examples, margin, clauses, specificity, accumulation):
             np_recall = np.concatenate(recall, axis=0)
             np_recall = np_recall.flatten('C')
             np_recall = np_recall[~np.isnan(np_recall)]
-            avg_recall = np.nansum(np_recall) / np_recall.size
+            avg_recall = np.sum(np_recall) / np_recall.size
+            
             f1_score = 2 * ((avg_precision * avg_recall) /
                             (avg_precision + avg_recall))
+            
             temp_data = pd.DataFrame({
-                            "Precision": avg_precision,
-                            "Recall": avg_recall,
-                            "F1 Score": f1_score,
-                            "Number of examples": examples,
-                            "Margin": margin,
-                            "Clauses": clauses,
-                            "Specificity": specificity,
-                            "Accumulation": accumulation,
-                            "Word results": [word_result]
+                            "Precision": [avg_precision],
+                            "Recall": [avg_recall],
+                            "F1 Score": [f1_score],
+                            "Number of examples": [examples],
+                            "Margin": [margin],
+                            "Clauses": [clauses],
+                            "Specificity": [specificity],
+                            "Accumulation": [accumulation],
+                            "Word results": [[word_result]]
                                            })
 
             temp_data.to_csv('results.csv', index=False,
