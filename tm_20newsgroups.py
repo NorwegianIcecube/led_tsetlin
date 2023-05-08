@@ -19,28 +19,29 @@ data_train = fetch_20newsgroups(
 print("fetching test data \n")
 data_test = fetch_20newsgroups(
     subset='test', categories=categories, shuffle=True, random_state=42)
+
 all_data = pd.concat([pd.DataFrame(data_train.data), pd.DataFrame(data_test.data)])
+all_data = all_data.sample(frac=1).reset_index(drop=True)
 data_train.data = all_data.iloc[:int(len(all_data)/2)].to_numpy().flatten()
 data_test.data = all_data.iloc[int(len(all_data)/2):].to_numpy().flatten()
 
-
 #target_words = ['god', 'jesus']
 target_words = ['graphics', 'windows', 'ibm', 'mac', 'x', 'crypt', 'electronics', 'medicine', 'space', 'sale', 'politics', 'guns', 'mideast', 'religion', 'autos', 'motorcycles', 'baseball', 'hockey', 'atheism', 'christian']
-#target_words = ['the', 'an', 'to']
+
 
 def index_sentence(sentence, keyword):
     words = sentence.split()
     index = ""
     found_index = 0
-    for i in range(len(words)):
-        if words[i] == keyword:
+    for i, word in enumerate(words):
+        if word == keyword:
             found_index = i
             break
     if found_index == 0:
         return sentence
     else:
-        for i in range(len(words)):
-            index += f"{words[i]}:{i - found_index} "
+        for i, word in enumerate(words):
+            index += f"{word}:{i - found_index} "
     return index[:-1]
 
 def drop_post_index(sentence, indexed=True, keyword=":0"):
@@ -48,44 +49,40 @@ def drop_post_index(sentence, indexed=True, keyword=":0"):
     sentence = ""
     for word in words:
         sentence += f"{word} "
-        if indexed and ":0" in word:
+        if indexed and keyword in word:
             break
         elif keyword in word:
             break
     return sentence[:-1]
     
-def weighted_average_precision_recall(model, num_target_words, num_examples):
-    #profile = np.empty((len(target_words), clauses))
+def weighted_average_precision_recall(model, num_target_words, num_examples, vectorized_data):
     precision = []
     recall = []
     f1 = []
-    all_precision = 0
-    num_weights = 0
+    all_precision, all_recall = 0, 0
+    num_p_weights,num_r_weights = 0, 0
+
     for i in range(num_target_words):
-        clause_precision = model.clause_precision(i, True, X_test_counts, number_of_examples=num_examples)
-        for index, clause in enumerate(clause_precision):
-            if np.isnan(clause):
-                continue
-            weighted_precision = clause * model.get_weights(i)[index]
-            all_precision += weighted_precision
-            num_weights += model.get_weights(i)[index]
+        clause_precision = model.clause_precision(i, True, vectorized_data, number_of_examples=num_examples)
+        clause_recall = model.clause_recall(i, True, vectorized_data, number_of_examples=num_examples)
+
+        for index, clause in enumerate(zip(clause_precision, clause_recall)):
+            model_weights = model.get_weights(i)[index]
+            if not np.isnan(clause[0]):
+                weighted_precision = clause[0] * model_weights
+                all_precision += weighted_precision
+                num_p_weights += model_weights
+            if not np.isnan(clause[1]):
+                weighted_recall = clause[1] * model_weights
+                all_recall += weighted_recall
+                num_r_weights += model_weights
+        
         try:
-            precision.append(all_precision / num_weights)
+            precision.append(all_precision / num_p_weights)
         except ZeroDivisionError:
             precision.append(0)
-
-    all_recall = 0
-    num_weights = 0
-    for i in range(num_target_words):
-        clause_recall = model.clause_recall(i, True, X_test_counts, number_of_examples=num_examples)
-        for index, clause in enumerate(clause_recall):
-            if np.isnan(clause):
-                continue
-            weighted_recall = clause * model.get_weights(i)[index]
-            all_recall += weighted_recall
-            num_weights += model.get_weights(i)[index]
         try:
-            recall.append(all_recall / num_weights)
+            recall.append(all_recall / num_r_weights)
         except ZeroDivisionError:
             recall.append(0)
 
@@ -95,48 +92,76 @@ def weighted_average_precision_recall(model, num_target_words, num_examples):
         except ZeroDivisionError:
             f1.append(0)
 
-    return np.sum(precision)/len(precision), np.sum(recall)/len(recall), np.sum(f1)/len(f1)
+    average_precision = np.sum(precision)/len(precision)
+    average_recall = np.sum(recall)/len(recall)
+    average_f1 = np.sum(f1)/len(f1)
+
+    return average_precision, average_recall, average_f1
+
+def indexed_next_word_prediction_sentence(sentence, target_word):
+    if target_word not in sentence:
+        return None
+    indexed_sentence = index_sentence(sentence, target_word)
+    if indexed_sentence != sentence:
+        indexed_next_word_prediction_sentence = drop_post_index(indexed_sentence)
+        return indexed_next_word_prediction_sentence
+
+def indexed_missing_word_prediction_sentence(sentence, target_word):
+    if target_word not in sentence:
+        return None
+    indexed_sentence = index_sentence(sentence, target_word)
+    return indexed_sentence
+
+def standard_next_word_prediction_sentence(sentence, target_word):
+    if target_word not in sentence:
+        return None
+    standard_next_word_prediction_sentence = drop_post_index(sentence, False, target_word)
+    return standard_next_word_prediction_sentence
 
 
+def standard_missing_word_prediction_sentence(sentence, target_word):
+    if target_word not in sentence:
+        return None
+    return sentence
 
-# Pre-process data
-for data_set in [data_train, data_test]:
+def pre_process(data):
     temp = []
-    for i in range(len(data_set.data)):
+    for doc in data.data:
         # Remove all data before and including the line which includes an email address
-        a = data_set.data[i].splitlines()
+        a = doc.splitlines()
         for j in range(len(a)):
             if 'Lines:' in a[j]:
                 a = a[j+1:]
                 break
-        data_set.data[i] = ' '.join(a)
-        data_set.data[i] = data_set.data[i].replace(",", "")
-        data_set.data[i] = data_set.data[i].replace('!', ' !')
-        data_set.data[i] = data_set.data[i].replace('?', ' ?')
-        data_set.data[i] = data_set.data[i].split('.')
-
-    for doc in data_set.data:
+        doc = ' '.join(a)
+        doc = doc.replace(",", "")
+        doc = doc.replace('!', ' !')
+        doc = doc.replace('?', ' ?')
+        doc = doc.split('.')
+        
         for sentence in doc:
-            if len(sentence) < 5:
-                continue
-            if len(sentence.split()) < 5:
-                continue
             sentence = sentence.strip()
             sentence = sentence.lower()
-            for i in range(len(target_words)):
-                #indexed_sentence = index_sentence(sentence, target_words[i])
-                indexed_sentence = sentence
-                #if indexed_sentence != sentence:
-                if target_words[i] not in indexed_sentence:
+            for word in target_words:
+                if sentence is None:
                     continue
-                if indexed_sentence == sentence:
-                    #indexed_sentence = drop_post_index(indexed_sentence)
-                    indexed_sentence = drop_post_index(indexed_sentence, False, target_words[i])
-                    temp.append(indexed_sentence)
+                # Choose 1 of the following 4 lines
+                new_sentence = indexed_next_word_prediction_sentence(sentence, word)
+                #new_sentence = indexed_missing_word_prediction_sentence(sentence, word)
+                #new_sentence = standard_next_word_prediction_sentence(sentence, word)
+                #new_sentence = standard_missing_word_prediction_sentence(sentence, word)
+                if new_sentence is not None:
+                    temp.append(new_sentence)
 
-    data_set.data = temp
+    data.data = temp
+    
+    return data
 
-# Create a count vectorizer
+# Pre-process data
+for data_set in [data_train, data_test]:
+    data_set = pre_process(data_set)
+
+# Create count vectorizers
 parsed_data_train = []
 for i in range(len(data_train.data)):
     a = data_train.data[i].split()
@@ -146,7 +171,6 @@ parsed_data_test = []
 for i in range(len(data_test.data)):
     a = data_test.data[i].split()
     parsed_data_test.append(a)
-
 
 def tokenizer(s):
     return s
@@ -158,18 +182,13 @@ feature_names = count_vect.get_feature_names_out()
 number_of_features = count_vect.get_feature_names_out().shape[0]
 X_test_counts = count_vect.transform(parsed_data_test)
 
-print(X_train_counts.shape, X_test_counts.shape)
-
-
 # Set Hyperparameters
 
 clause_weight_threshold = 0
 num_examples = 1000
 clauses = 15
-# How many votes needed for action
-margin = 350
-# Forget value
-specificity = 5.0
+margin = 350 # How many votes needed for action
+specificity = 5.0   # Forget value
 accumulation = 50
 epochs = 20
 
@@ -177,10 +196,9 @@ epochs = 20
 
 output_active = np.empty(len(target_words), dtype=np.uint32)
 for i in range(len(target_words)):
-    #target_word = f"{target_words[i]}:0"
-    target_word = target_words[i]
-
-    target_id = count_vect.vocabulary_[target_word]
+    # Choose 1 of the following 2 lines based on whether you want to use the indexed or uninexed version
+    #target_id = count_vect.vocabulary_[target_words[i]]
+    target_id = count_vect.vocabulary_[f"{target_words[i]}:0"]
     output_active[i] = target_id
 
 enc = TMAutoEncoder(number_of_clauses=clauses, T=margin, max_included_literals=3,
@@ -198,7 +216,7 @@ for e in range(epochs):
     enc.fit(X_train_counts, number_of_examples=num_examples)
     stop_training = time()
 
-    model_precision, model_recall, model_f1 = weighted_average_precision_recall(enc, len(target_words), num_examples)
+    model_precision, model_recall, model_f1 = weighted_average_precision_recall(enc, len(target_words), num_examples, X_test_counts)
 
     precision = []
     recall = []
