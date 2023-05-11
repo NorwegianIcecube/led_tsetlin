@@ -1,17 +1,18 @@
 import numpy as np
+import pandas as pd
 from sklearn.datasets import fetch_20newsgroups
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from tmu.models.autoencoder.autoencoder import TMAutoEncoder
-from time import time
-import pandas as pd
 
 # Load data
-#categories = ['alt.atheism', 'soc.religion.christian', 'talk.religion.misc']
-categories = ['comp.graphics', 'comp.os.ms-windows.misc', 'comp.sys.ibm.pc.hardware', 'comp.sys.mac.hardware',
-              'comp.windows.x', 'sci.crypt', 'sci.electronics', 'sci.med', 'sci.space', 'misc.forsale',
-              'talk.politics.misc', 'talk.politics.guns', 'talk.politics.mideast', 'talk.religion.misc',
-              'rec.autos', 'rec.motorcycles', 'rec.sport.baseball', 'rec.sport.hockey', 'alt.atheism', 'soc.religion.christian']
+categories = ['alt.atheism', 'soc.religion.christian', 'talk.religion.misc']
+#categories = ['comp.graphics', 'comp.os.ms-windows.misc', 'comp.sys.ibm.pc.hardware',
+              #'comp.sys.mac.hardware','comp.windows.x', 'sci.crypt', 'sci.electronics',
+              #'sci.med', 'sci.space', 'misc.forsale','talk.politics.misc',
+              #'talk.politics.guns', 'talk.politics.mideast', 'talk.religion.misc',
+              #'rec.autos', 'rec.motorcycles', 'rec.sport.baseball', 'rec.sport.hockey',
+              #'alt.atheism', 'soc.religion.christian']
+
 print("fetching training data \n")
 data_train = fetch_20newsgroups(
     subset='train', categories=categories, shuffle=True, random_state=42)
@@ -25,8 +26,11 @@ all_data = all_data.sample(frac=1).reset_index(drop=True)
 data_train.data = all_data.iloc[:int(len(all_data)/2)].to_numpy().flatten()
 data_test.data = all_data.iloc[int(len(all_data)/2):].to_numpy().flatten()
 
-#target_words = ['god', 'jesus']
-target_words = ['graphics', 'windows', 'ibm', 'mac', 'x', 'crypt', 'electronics', 'medicine', 'space', 'sale', 'politics', 'guns', 'mideast', 'religion', 'autos', 'motorcycles', 'baseball', 'hockey', 'atheism', 'christian']
+target_words = ['jesus', 'christ', 'accept', 'trust', 'faith']
+#target_words = ['graphics', 'windows', 'ibm', 'mac', 'gun', 'cryptography',
+#                'electronics', 'medicine', 'space', 'sale', 'politics',
+#                'guns', 'mideast', 'religion', 'autos', 'motorcycles',
+#                'baseball', 'hockey', 'atheism', 'christian']
 
 
 def index_sentence(sentence, keyword):
@@ -55,7 +59,8 @@ def drop_post_index(sentence, indexed=True, keyword=":0"):
             break
     return sentence[:-1]
     
-def weighted_average_precision_recall(model, num_target_words, num_examples, vectorized_data):
+def weighted_average_precision_recall(model, num_target_words,
+                                      num_examples, vectorized_data):
     precision = []
     recall = []
     f1 = []
@@ -63,8 +68,10 @@ def weighted_average_precision_recall(model, num_target_words, num_examples, vec
     num_p_weights,num_r_weights = 0, 0
 
     for i in range(num_target_words):
-        clause_precision = model.clause_precision(i, True, vectorized_data, number_of_examples=num_examples)
-        clause_recall = model.clause_recall(i, True, vectorized_data, number_of_examples=num_examples)
+        clause_precision = model.clause_precision(i, True, vectorized_data,
+                                                  number_of_examples=num_examples)
+        clause_recall = model.clause_recall(i, True, vectorized_data,
+                                            number_of_examples=num_examples)
 
         for index, clause in enumerate(zip(clause_precision, clause_recall)):
             model_weights = model.get_weights(i)[index]
@@ -124,7 +131,10 @@ def standard_missing_word_prediction_sentence(sentence, target_word):
         return None
     return sentence
 
-def pre_process(data):
+def standard_missing_word_prediction_no_drop(sentence, target_word):
+    return sentence
+
+def pre_process(data, prediction_type):
     temp = []
     for doc in data.data:
         # Remove all data before and including the line which includes an email address
@@ -145,116 +155,167 @@ def pre_process(data):
             for word in target_words:
                 if sentence is None:
                     continue
-                # Choose 1 of the following 4 lines
-                new_sentence = indexed_next_word_prediction_sentence(sentence, word)
-                #new_sentence = indexed_missing_word_prediction_sentence(sentence, word)
-                #new_sentence = standard_next_word_prediction_sentence(sentence, word)
-                #new_sentence = standard_missing_word_prediction_sentence(sentence, word)
+                new_sentence = prediction_type(sentence, word)
                 if new_sentence is not None:
                     temp.append(new_sentence)
-
     data.data = temp
-    
     return data
 
-# Pre-process data
-for data_set in [data_train, data_test]:
-    data_set = pre_process(data_set)
+def create_encoder(count_vect, target_words, clauses, margin,
+                   specificity, accumulation, max_literals,
+                   indexed=True):
+    output_active = np.empty(len(target_words), dtype=np.uint32)
+    for i, word in enumerate(target_words):
+        if indexed:
+            target_id = count_vect.vocabulary_[f"{word}:0"]
+        else:
+            target_id = count_vect.vocabulary_[word]
+        output_active[i] = target_id
 
-# Create count vectorizers
-parsed_data_train = []
-for i in range(len(data_train.data)):
-    a = data_train.data[i].split()
-    parsed_data_train.append(a)
-
-parsed_data_test = []
-for i in range(len(data_test.data)):
-    a = data_test.data[i].split()
-    parsed_data_test.append(a)
+    enc = TMAutoEncoder(number_of_clauses=clauses, T=margin, max_included_literals=max_literals,
+                        s=specificity, output_active=output_active, accumulation=accumulation,
+                        feature_negation=False, platform='CPU', output_balancing=True)
+    return enc
 
 def tokenizer(s):
     return s
 
-count_vect = CountVectorizer(tokenizer=tokenizer, lowercase=False, binary=True)
+def create_count_vectorizer(data_train, data_test, tokenizer):
+    parsed_data_train = []
+    for i in range(len(data_train.data)):
+        a = data_train.data[i].split()
+        parsed_data_train.append(a)
 
-X_train_counts = count_vect.fit_transform(parsed_data_train)
-feature_names = count_vect.get_feature_names_out()
-number_of_features = count_vect.get_feature_names_out().shape[0]
-X_test_counts = count_vect.transform(parsed_data_test)
+    parsed_data_test = []
+    for i in range(len(data_test.data)):
+        a = data_test.data[i].split()
+        parsed_data_test.append(a)
 
-# Set Hyperparameters
+    count_vect = CountVectorizer(tokenizer=tokenizer, lowercase=False, binary=True)
+    X_train_counts = count_vect.fit_transform(parsed_data_train)
+    X_test_counts = count_vect.transform(parsed_data_test)
 
-clause_weight_threshold = 0
-num_examples = 1000
-clauses = 15
-margin = 350 # How many votes needed for action
-specificity = 5.0   # Forget value
-accumulation = 50
-epochs = 20
+    return count_vect, X_train_counts, X_test_counts
 
-# Create a Tsetlin Machine Autoencoder
+def print_clauses(enc, target_words, precision, recall):
+    clauses = enc.clause_bank.number_of_clauses
+    count_vect = CountVectorizer(tokenizer=tokenizer, lowercase=False, binary=True)
+    feature_names = count_vect.get_feature_names_out()
+    print("Clauses\n")
+    for j in range(clauses):
+        print("Clause #%d " % (j), end=' ')
+        for i in range(len(target_words)):
+            print("%s: W%d:P%.2f:R%.2f " % (target_words[i], enc.get_weight(
+                i, j), precision[i][j], recall[i][j]), end=' ')
 
-output_active = np.empty(len(target_words), dtype=np.uint32)
-for i in range(len(target_words)):
-    # Choose 1 of the following 2 lines based on whether you want to use the indexed or uninexed version
-    #target_id = count_vect.vocabulary_[target_words[i]]
-    target_id = count_vect.vocabulary_[f"{target_words[i]}:0"]
-    output_active[i] = target_id
-
-enc = TMAutoEncoder(number_of_clauses=clauses, T=margin, max_included_literals=3,
-                    s=specificity, output_active=output_active, accumulation=accumulation, feature_negation=False, platform='CPU', output_balancing=True)
-
-# Create dataframe to log results
-df = pd.DataFrame(columns=['epoch', 'precision', 'recall', 'f1'])
-df.to_csv('tm_20newsgroups.csv', index=False, mode='w')
-
-# Train the Tsetlin Machine Autoencoder
-print("Starting training \n")
-
-for e in range(epochs):
-    start_training = time()
-    enc.fit(X_train_counts, number_of_examples=num_examples)
-    stop_training = time()
-
-    model_precision, model_recall, model_f1 = weighted_average_precision_recall(enc, len(target_words), num_examples, X_test_counts)
-
-    precision = []
-    recall = []
-    for i in range(len(target_words)):
-        precision.append(enc.clause_precision(i, True, X_train_counts, number_of_examples=num_examples))
-        recall.append(enc.clause_recall(i, True, X_train_counts, number_of_examples=num_examples))
-
+        l = []
+        for k in range(enc.clause_bank.number_of_literals):
+            if enc.get_ta_action(j, k) == 1:
+                if k < enc.clause_bank.number_of_features:
+                    l.append("%s(%d)" % (
+                        feature_names[k], enc.clause_bank.get_ta_state(j, k)))
+                else:
+                    l.append("¬%s(%d)" % (
+                        feature_names[k-enc.clause_bank.number_of_features],
+                        enc.clause_bank.get_ta_state(j, k)
+                        ))
+        print(" ∧ ".join(l))
     
-    print("Epoch #%d" % (e+1))
-    print("Precision: %s" % model_precision)
-    print("Recall: %s" % model_recall)
-    print(f"f1: {model_f1} \n")
+def train_encoder(enc, training_data, test_data, out_file, target_words,
+                  num_examples, epochs, clause_print=False):
+    metrics_per_epoch = np.empty((epochs, 7))
+    print("Starting training \n")
+    for e in range(epochs):
+        enc.fit(training_data, number_of_examples=num_examples)
 
-    e_df = pd.DataFrame(
+        model_precision, model_recall, model_f1 = weighted_average_precision_recall(enc, len(target_words),
+                                                                                    num_examples, training_data)
+        test_precision, test_recall, test_f1 = weighted_average_precision_recall(enc, len(target_words),
+                                                                                num_examples, test_data)
+        precision = []
+        recall = []
+        for i in range(len(target_words)):
+            precision.append(enc.clause_precision(i, True, training_data, number_of_examples=num_examples))
+            recall.append(enc.clause_recall(i, True, training_data, number_of_examples=num_examples))
+        print("Epoch #%d" % (e+1))
+        print("Precision: %s, %s" % (model_precision, test_precision))
+        print("Recall: %s, %s" % (model_recall, test_recall))
+        print("f1: %s, %s \n" % (model_f1, test_f1))
+
+        e_df = pd.DataFrame(
+            {
+                'epoch': [e+1],
+                'precision': model_precision,
+                'recall': model_recall,
+                'f1': model_f1,
+                'test_precision': test_precision,
+                'test_recall': test_recall,
+                'test_f1': test_f1
+            }
+        )
+        e_df.to_csv(out_file, index=False, mode='a', header=False)
+        metrics_per_epoch[e] = [e+1, model_precision, model_recall, model_f1,
+                                test_precision, test_recall, test_f1]
+    
+    if clause_print:
+        print_clauses(enc, target_words, precision, recall)
+
+    return metrics_per_epoch
+
+
+if __name__ == "__main__":
+    # Set Hyperparameters
+    num_examples = 100
+    clauses = 15
+    margin = 500 # How many votes needed for action
+    specificity = 2.5   # Forget value
+    accumulation = 5
+    max_literals = 20
+    epochs = 15
+
+    # Create dataframe to log results
+    df = pd.DataFrame(columns=['epoch', 'precision', 'recall', 'f1',
+                               'test_precision', 'test_recall', 'test_f1'])
+    df.to_csv('tm_20newsgroups.csv', index=False, mode='w')
+
+    for data_set in [data_train, data_test]:
+        data_set = pre_process(data_set, indexed_next_word_prediction_sentence)
+
+    count_vect, X_train_counts, X_test_counts = create_count_vectorizer(data_train, data_test, tokenizer)
+
+    number_of_runs = 5
+    results = np.empty((number_of_runs, epochs, 7))
+    for i in range(number_of_runs):
+        enc = create_encoder(count_vect, target_words, clauses, margin,
+                            specificity, accumulation, max_literals,
+                            indexed=True)
+        results[i] = train_encoder(enc, X_train_counts, X_test_counts, 'tm_20newsgroups.csv',
+                                    target_words, num_examples, epochs, clause_print=False)
+    
+    average_results = np.zeros((epochs, 7))
+    divisor_array = np.full((epochs, 7), number_of_runs)
+    for run in range(len(results)):
+        for epoch in range(len(results[run])):
+            for result in range(len(results[run][epoch])):
+                if np.isnan(results[run][epoch][result]):
+                    divisor_array[epoch][result] -= 1
+                    continue
+                average_results[epoch][result] += results[run][epoch][result]
+    print(average_results)
+    print(divisor_array)
+    average_results = np.divide(average_results, divisor_array)
+    
+
+    print(average_results)
+    df = pd.DataFrame(
         {
-            'epoch': [e+1],
-            'precision': model_precision,
-            'recall': model_recall,
-            'f1': model_f1
+            'epoch': average_results[:, 0],
+            'precision': average_results[:, 1],
+            'recall': average_results[:, 2],
+            'f1': average_results[:, 3],
+            'test_precision': average_results[:, 4],
+            'test_recall': average_results[:, 5],
+            'test_f1': average_results[:, 6]
         }
     )
-    e_df.to_csv('tm_20newsgroups.csv', index=False, mode='a', header=False)
-
-
-print("Clauses\n")
-for j in range(clauses):
-    print("Clause #%d " % (j), end=' ')
-    for i in range(len(target_words)):
-        print("%s: W%d:P%.2f:R%.2f " % (target_words[i], enc.get_weight(
-            i, j), precision[i][j], recall[i][j]), end=' ')
-
-    l = []
-    for k in range(enc.clause_bank.number_of_literals):
-        if enc.get_ta_action(j, k) == 1:
-            if k < enc.clause_bank.number_of_features:
-                l.append("%s(%d)" % (
-                    feature_names[k], enc.clause_bank.get_ta_state(j, k)))
-            else:
-                l.append("¬%s(%d)" % (
-                    feature_names[k-enc.clause_bank.number_of_features], enc.clause_bank.get_ta_state(j, k)))
-    print(" ∧ ".join(l))
+    df.to_csv('tm_20newsgroups_average.csv', index=False, mode='w', header=True)
