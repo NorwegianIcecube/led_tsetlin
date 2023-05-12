@@ -166,10 +166,10 @@ def pre_process(data):
                 # new_sentence = indexed_next_word_prediction_sentence(sentence, word)
                 # new_sentence = indexed_missing_word_prediction_sentence(sentence, word)
                 # new_sentence = standard_next_word_prediction_sentence(sentence, word)
-                new_sentence = standard_missing_word_prediction_sentence(
-                    sentence, word)
-                if new_sentence is not None:
-                    temp.append(new_sentence)
+                #new_sentence = standard_missing_word_prediction_sentence(
+                #    sentence, word)
+                #if new_sentence is not None:
+                temp.append(sentence)
 
     data.data = temp
 
@@ -205,10 +205,10 @@ X_test_counts = count_vect.transform(parsed_data_test)
 
 # Create Hyperparameter vectors
 examples_max = 1000
-margin_max = 300
-clause_max = 30
-specificity_max = 5.0
-accumulation_max = 15
+margin_max = 500
+clause_max = 100
+specificity_max = 20.0
+accumulation_max = 50
 max_num_literals = 9
 steps = 2
 
@@ -216,7 +216,7 @@ examples_vector = [250]
 margin_vector = [50]
 clause_vector = [5]
 # Setting specificity to 1 makes the epochs take 400+ seconds
-specificity_vector = [1.2]
+specificity_vector = [2.5]
 accumulation_vector = [5]
 max_num_vector = [3]
 
@@ -256,7 +256,7 @@ settings = {
 # Set Hyperparameters
 
 clause_weight_threshold = 0
-epochs = 20
+epochs = 15
 
 
 output_active = np.empty(len(target_words), dtype=np.uint32)
