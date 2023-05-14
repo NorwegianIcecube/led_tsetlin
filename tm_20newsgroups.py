@@ -106,6 +106,7 @@ def weighted_average_precision_recall(model, num_target_words,
     return average_precision, average_recall, average_f1
 
 def indexed_next_word_prediction_sentence(sentence, target_word):
+    """ Returns the sentence with the target word indexed and the rest of the sentence is dropped"""
     if target_word not in sentence:
         return None
     indexed_sentence = index_sentence(sentence, target_word)
@@ -114,12 +115,14 @@ def indexed_next_word_prediction_sentence(sentence, target_word):
         return indexed_next_word_prediction_sentence
 
 def indexed_missing_word_prediction_sentence(sentence, target_word):
+    """ Returns the sentence with the target word indexed and masked"""
     if target_word not in sentence:
         return None
     indexed_sentence = index_sentence(sentence, target_word)
     return indexed_sentence
 
 def standard_next_word_prediction_sentence(sentence, target_word):
+    """ Returns the sentence with the target word dropped and the rest of the sentence is dropped"""
     if target_word not in sentence:
         return None
     standard_next_word_prediction_sentence = drop_post_index(sentence, False, target_word)
@@ -127,14 +130,29 @@ def standard_next_word_prediction_sentence(sentence, target_word):
 
 
 def standard_missing_word_prediction_sentence(sentence, target_word):
+    """ Returns the sentence with the target word masked"""
     if target_word not in sentence:
         return None
     return sentence
 
 def standard_missing_word_prediction_no_drop(sentence, target_word):
+    """ Returns the sentence with the target word masked and does not drop sentances with no target word"""
     return sentence
 
 def pre_process(data, prediction_type):
+    """Pre-processes the data by removing all lines before the line which includes an email address and removing all commas and periods.
+    
+    Keyword arguments:
+    
+    data -- the data to be pre-processed
+    prediction_type -- the type of prediction to be made (indexed_next_word_prediction_sentence, ... 
+    indexed_missing_word_prediction_sentence, standard_next_word_prediction_sentence, ...
+    standard_missing_word_prediction_sentence)
+    
+    Output:
+    
+    data -- the pre-processed data
+    """
     temp = []
     for doc in data.data:
         # Remove all data before and including the line which includes an email address
@@ -164,6 +182,23 @@ def pre_process(data, prediction_type):
 def create_encoder(count_vect, target_words, clauses, margin,
                    specificity, accumulation, max_literals,
                    indexed=True):
+    """Creates a Tsetlin Machine Auto-Encoder with the given parameters.
+    
+    keyword arguments:
+    
+    count_vect -- the CountVectorizer used to vectorize the data
+    target_words -- the target words to be encoded
+    clauses -- the number of clauses in the Tsetlin Machine
+    margin -- the margin parameter of the Tsetlin Machine
+    specificity -- the specificity parameter of the Tsetlin Machine
+    accumulation -- the accumulation parameter of the Tsetlin Machine
+    max_literals -- the maximum number of literals in a clause
+    indexed -- whether the target words are indexed or not
+    
+    Output:
+    
+    enc -- the Tsetlin Machine Auto-Encoder with the given parameters. 
+    """
     output_active = np.empty(len(target_words), dtype=np.uint32)
     for i, word in enumerate(target_words):
         if indexed:
@@ -181,6 +216,20 @@ def tokenizer(s):
     return s
 
 def create_count_vectorizer(data_train, data_test, tokenizer):
+    """ Creates a CountVectorizer and uses it to vectorize the data.
+    
+    Keyword arguments:
+    
+    data_train -- the training data 
+    data_test -- the testing data 
+    tokenizer -- the tokenizer to be used 
+    
+    Output:
+    
+    count_vect -- the CountVectorizer used to vectorize the data
+    X_train_counts -- the vectorized training data
+    X_test_counts -- the vectorized testing data
+    """
     parsed_data_train = []
     for i in range(len(data_train.data)):
         a = data_train.data[i].split()
@@ -223,6 +272,23 @@ def print_clauses(enc, target_words, precision, recall):
     
 def train_encoder(enc, training_data, test_data, out_file, target_words,
                   num_examples, epochs, clause_print=False):
+    """Trains the given encoder on the given data.
+    
+    keyword arguments:
+    
+    enc -- the encoder to be trained
+    training_data -- the data to train the encoder on
+    test_data -- the data to test the encoder on
+    out_file -- the file to write the results to
+    target_words -- the target words to be encoded
+    num_examples -- the number of examples to train on
+    epochs -- the number of epochs to train for
+    clause_print -- whether to print the clauses or not
+    
+    output:
+    
+    metrics_per_epoch -- the metrics per epoch for the encoder on the training data and test data.
+    """
     metrics_per_epoch = np.empty((epochs, 7))
     print("Starting training \n")
     for e in range(epochs):
