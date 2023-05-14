@@ -78,14 +78,14 @@ X_test_counts = count_vect.transform(parsed_data_test)
 # Set Hyperparameters
 
 clause_weight_threshold = 0
-num_examples = 500
-clauses = 100
+num_examples = 1000
+clauses = 15
 # How many votes needed for action
 margin = 150
 # Forget value
 specificity = 5.0
-accumulation = 25
-epochs = 100
+accumulation = 50
+epochs = 50
 
 # Create a Tsetlin Machine Autoencoder
 target_words = [
@@ -231,5 +231,6 @@ plt.plot(f1_list, label="f1_score")
 plt.plot(precision_list, label="precision")
 plt.plot(recall_list, label="recall")
 plt.xlabel("Epochs")
+plt.ylabel("Performance metrics")
 plt.legend()
-plt.show()
+plt.savefig("F1_P_R", format="png")

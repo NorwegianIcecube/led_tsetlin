@@ -11,51 +11,184 @@ from itertools import product
 
 
 # Load data
+# categories = ['alt.atheism', 'soc.religion.christian', 'talk.religion.misc']
 categories = ["alt.atheism", "soc.religion.christian", "talk.religion.misc"]
 print("fetching training data \n")
-data_train = fetch_20newsgroups(subset="train", categories=categories, shuffle=False)
+data_train = fetch_20newsgroups(
+    subset='train', categories=categories, shuffle=True, random_state=42)
+
 print("fetching test data \n")
-data_test = fetch_20newsgroups(subset="test", categories=categories, shuffle=False)
+data_test = fetch_20newsgroups(
+    subset='test', categories=categories, shuffle=True, random_state=42)
+
+all_data = pd.concat([pd.DataFrame(data_train.data),
+                     pd.DataFrame(data_test.data)])
+all_data = all_data.sample(frac=1).reset_index(drop=True)
+data_train.data = all_data.iloc[:int(len(all_data)/2)].to_numpy().flatten()
+data_test.data = all_data.iloc[int(len(all_data)/2):].to_numpy().flatten()
+
+# target_words = ['god', 'jesus']
+target_words = ["jesus",
+                "christ",
+                "accept",
+                "trust",
+                "faith"]
 
 
-# Pre-process data
-for data_set in [data_train, data_test]:
+def index_sentence(sentence, keyword):
+    words = sentence.split()
+    index = ""
+    found_index = 0
+    for i, word in enumerate(words):
+        if word == keyword:
+            found_index = i
+            break
+    if found_index == 0:
+        return sentence
+    else:
+        for i, word in enumerate(words):
+            index += f"{word}:{i - found_index} "
+    return index[:-1]
+
+
+def drop_post_index(sentence, indexed=True, keyword=":0"):
+    words = sentence.split()
+    sentence = ""
+    for word in words:
+        sentence += f"{word} "
+        if indexed and keyword in word:
+            break
+        elif keyword in word:
+            break
+    return sentence[:-1]
+
+
+def weighted_average_precision_recall(model, num_target_words, num_examples, vectorized_data):
+    precision = []
+    recall = []
+    f1 = []
+    all_precision, all_recall = 0, 0
+    num_p_weights, num_r_weights = 0, 0
+
+    for i in range(num_target_words):
+        clause_precision = model.clause_precision(
+            i, True, vectorized_data, number_of_examples=num_examples)
+        clause_recall = model.clause_recall(
+            i, True, vectorized_data, number_of_examples=num_examples)
+
+        for index, clause in enumerate(zip(clause_precision, clause_recall)):
+            model_weights = model.get_weights(i)[index]
+            if not np.isnan(clause[0]):
+                weighted_precision = clause[0] * model_weights
+                all_precision += weighted_precision
+                num_p_weights += model_weights
+            if not np.isnan(clause[1]):
+                weighted_recall = clause[1] * model_weights
+                all_recall += weighted_recall
+                num_r_weights += model_weights
+
+        try:
+            precision.append(all_precision / num_p_weights)
+        except ZeroDivisionError:
+            precision.append(0)
+        try:
+            recall.append(all_recall / num_r_weights)
+        except ZeroDivisionError:
+            recall.append(0)
+
+    for i in range(num_target_words):
+        try:
+            f1.append(2 * (precision[i] * recall[i]) /
+                      (precision[i] + recall[i]))
+        except ZeroDivisionError:
+            f1.append(0)
+
+    average_precision = np.sum(precision)/len(precision)
+    average_recall = np.sum(recall)/len(recall)
+    average_f1 = np.sum(f1)/len(f1)
+
+    return average_precision, average_recall, average_f1
+
+
+def indexed_next_word_prediction_sentence(sentence, target_word):
+    if target_word not in sentence:
+        return None
+    indexed_sentence = index_sentence(sentence, target_word)
+    if indexed_sentence != sentence:
+        indexed_next_word_prediction_sentence = drop_post_index(
+            indexed_sentence)
+        return indexed_next_word_prediction_sentence
+
+
+def indexed_missing_word_prediction_sentence(sentence, target_word):
+    if target_word not in sentence:
+        return None
+    indexed_sentence = index_sentence(sentence, target_word)
+    return indexed_sentence
+
+
+def standard_next_word_prediction_sentence(sentence, target_word):
+    if target_word not in sentence:
+        return None
+    standard_next_word_prediction_sentence = drop_post_index(
+        sentence, False, target_word)
+    return standard_next_word_prediction_sentence
+
+
+def standard_missing_word_prediction_sentence(sentence, target_word):
+    if target_word not in sentence:
+        return None
+    return sentence
+
+
+def pre_process(data):
     temp = []
-    for i in range(len(data_set.data)):
+    for doc in data.data:
         # Remove all data before and including the line which includes an email address
-        a = data_set.data[i].splitlines()
+        a = doc.splitlines()
         for j in range(len(a)):
-            if "Lines:" in a[j]:
-                a = a[j + 1 :]
+            if 'Lines:' in a[j]:
+                a = a[j+1:]
                 break
-        data_set.data[i] = " ".join(a)
-        data_set.data[i] = data_set.data[i].replace(",", " ,")
-        data_set.data[i] = data_set.data[i].replace("!", " !")
-        data_set.data[i] = data_set.data[i].replace("?", " ?")
-        data_set.data[i] = data_set.data[i].split(".")
+        doc = ' '.join(a)
+        doc = doc.replace(",", "")
+        doc = doc.replace('!', ' !')
+        doc = doc.replace('?', ' ?')
+        doc = doc.split('.')
 
-    for doc in data_set.data:
         for sentence in doc:
-            if len(sentence) < 5:
-                continue
-            if len(sentence.split()) < 5:
-                continue
             sentence = sentence.strip()
-            temp.append(sentence)
+            sentence = sentence.lower()
+            for word in target_words:
+                if sentence is None:
+                    continue
+                # Choose 1 of the following 4 lines
+                # new_sentence = indexed_next_word_prediction_sentence(sentence, word)
+                # new_sentence = indexed_missing_word_prediction_sentence(sentence, word)
+                # new_sentence = standard_next_word_prediction_sentence(sentence, word)
+                #new_sentence = standard_missing_word_prediction_sentence(
+                #    sentence, word)
+                #if new_sentence is not None:
+                temp.append(sentence)
 
-    data_set.data = temp
+    data.data = temp
+
+    return data
 
 
-# Create a count vectorizer
+for data_set in [data_train, data_test]:
+    data_set = pre_process(data_set)
+
+# Create count vectorizers
 parsed_data_train = []
 for i in range(len(data_train.data)):
     a = data_train.data[i].split()
-    parsed_data_train.append(map(str.lower, a))
+    parsed_data_train.append(a)
 
 parsed_data_test = []
 for i in range(len(data_test.data)):
     a = data_test.data[i].split()
-    parsed_data_test.append(map(str.lower, a))
+    parsed_data_test.append(a)
 
 
 def tokenizer(s):
@@ -71,19 +204,21 @@ number_of_features = count_vect.get_feature_names_out().shape[0]
 X_test_counts = count_vect.transform(parsed_data_test)
 
 # Create Hyperparameter vectors
-examples_max = 2000
+examples_max = 1000
 margin_max = 500
-clause_max = 250
+clause_max = 100
 specificity_max = 20.0
-accumulation_max = 100
-steps = 3
+accumulation_max = 50
+max_num_literals = 9
+steps = 2
 
-examples_vector = [100]
+examples_vector = [250]
 margin_vector = [50]
-clause_vector = [15]
+clause_vector = [5]
 # Setting specificity to 1 makes the epochs take 400+ seconds
 specificity_vector = [2.5]
 accumulation_vector = [5]
+max_num_vector = [3]
 
 
 def grid_parameters(parameters: dict[str, Iterable[Any]]) -> Iterable[dict[str, Any]]:
@@ -95,14 +230,20 @@ for i in range(steps):
     examples_vector.append(
         examples_vector[i] + (examples_max - examples_vector[0]) // steps
     )
-    margin_vector.append(margin_vector[i] + (margin_max - margin_vector[0]) // steps)
-    clause_vector.append(clause_vector[i] + (clause_max - clause_vector[0]) // steps)
+    margin_vector.append(
+        margin_vector[i] + (margin_max - margin_vector[0]) // steps)
+    clause_vector.append(
+        clause_vector[i] + (clause_max - clause_vector[0]) // steps)
     specificity_vector.append(
-        specificity_vector[i] + (specificity_max - specificity_vector[0]) / steps
+        specificity_vector[i] +
+        (specificity_max - specificity_vector[0]) / steps
     )
     accumulation_vector.append(
-        accumulation_vector[i] + (accumulation_max - accumulation_vector[0]) // steps
+        accumulation_vector[i] +
+        (accumulation_max - accumulation_vector[0]) // steps
     )
+    max_num_vector.append(
+        max_num_vector[i] + (max_num_literals - max_num_vector[0]) // steps)
 
 settings = {
     "examples": examples_vector,
@@ -110,24 +251,13 @@ settings = {
     "clauses": clause_vector,
     "specificity": specificity_vector,
     "accumulation": accumulation_vector,
+    "max_num_literal": max_num_vector,
 }
 # Set Hyperparameters
 
 clause_weight_threshold = 0
 epochs = 15
 
-# Create a Tsetlin Machine Autoencoder
-target_words = [
-    "jesus",
-    "christ",
-    "accept",
-    "deny",
-    "trust",
-    "faith",
-    "religious",
-    "god",
-    "atheists",
-]
 
 output_active = np.empty(len(target_words), dtype=np.uint32)
 for i in range(len(target_words)):
@@ -141,18 +271,21 @@ df = pd.DataFrame(
         "Precision",
         "Recall",
         "F1 Score",
+        "Test Precision",
+        "Test Recall",
+        "Test F1",
         "Number of examples",
         "Margin",
         "Clauses",
         "Specificity",
         "Accumulation",
-        "Word results",
+        "Max_included_literals",
     ]
 )
 df.to_csv("results.csv", index=False, mode="w")
 
 
-def train(examples, margin, clauses, specificity, accumulation):
+def train(examples, margin, clauses, specificity, accumulation, max_num_literal):
     enc = TMAutoEncoder(
         number_of_clauses=clauses,
         T=margin,
@@ -162,6 +295,7 @@ def train(examples, margin, clauses, specificity, accumulation):
         feature_negation=False,
         platform="CPU",
         output_balancing=True,
+        max_included_literals=max_num_literal
     )
 
     # Train the Tsetlin Machine Autoencoder
@@ -171,101 +305,33 @@ def train(examples, margin, clauses, specificity, accumulation):
         enc.fit(X_train_counts, number_of_examples=examples)
         stop_training = time()
 
-        profile = np.empty((len(target_words), clauses))
-        precision = []
-        recall = []
-
         print("Epoch #%d" % (e + 1))
-
+        print("Time %f" % (stop_training - start_training))
         if e == epochs - 1:
-            for i in range(len(target_words)):
-                precision.append(
-                    enc.clause_precision(
-                        i, True, X_train_counts, number_of_examples=examples
-                    )
-                )
-                recall.append(
-                    enc.clause_recall(
-                        i, True, X_train_counts, number_of_examples=examples
-                    )
-                )
-                weights = enc.get_weights(i)
-                profile[i, :] = np.where(weights >= clause_weight_threshold, weights, 0)
-
-            print("Precision: %s" % precision)
-            print("Recall: %s \n" % recall)
-            print("Clauses\n")
-            """
-            clause_result = []
-            for j in range(clause_vector[clause_index]):
-                print("Clause #%d " % (j), end=' ')
-                for i in range(len(target_words)):
-                    print("%s: W%d:P%.2f:R%.2f " % (target_words[i], enc.get_weight(
-                        i, j), precision[i][j], recall[i][j]), end=' ')
-
-                l = []
-                for k in range(enc.clause_bank.number_of_literals):
-                    if enc.get_ta_action(j, k) == 1:
-                        if k < enc.clause_bank.number_of_features:
-                            l.append("%s(%d)" % (
-                                feature_names[k], enc.clause_bank.get_ta_state(j, k)))
-                        else:
-                            l.append("¬%s(%d)" % (
-                                feature_names[k-enc.clause_bank.number_of_features], enc.clause_bank.get_ta_state(j, k)))
-                print(" ∧ ".join(l))
-                clause_result.append(" ∧ ".join(l))
-        """
-
-            similarity = cosine_similarity(profile)
-
-            print("\nWord Similarity\n")
-            word_result = ""
-            for i in range(len(target_words)):
-                print(target_words[i], end=": ")
-                sorted_index = np.argsort(-1 * similarity[i, :])
-                word_result += "\n" + target_words[i] + ": "
-                for j in range(1, len(target_words)):
-                    print(
-                        "%s(%.2f) "
-                        % (
-                            target_words[sorted_index[j]],
-                            similarity[i, sorted_index[j]],
-                        ),
-                        end=" ",
-                    )
-                    word_result += f"{target_words[sorted_index[j]]}: {similarity[i, sorted_index[j]]}, "
-
-                print()
-        print()
-        print("\nTraining Time: %.2f" % (stop_training - start_training))
-        if e == epochs - 1:
-            np_precision = np.concatenate(precision, axis=0)
-            np_precision = np_precision.flatten("C")
-            np_precision = np_precision[~np.isnan(np_precision)]
-            avg_precision = np.sum(np_precision) / np_precision.size
-
-            np_recall = np.concatenate(recall, axis=0)
-            np_recall = np_recall.flatten("C")
-            np_recall = np_recall[~np.isnan(np_recall)]
-            avg_recall = np.sum(np_recall) / np_recall.size
-
-            f1_score = 2 * ((avg_precision * avg_recall) / (avg_precision + avg_recall))
+            train_precision, train_recall, train_f1 = weighted_average_precision_recall(
+                enc, len(target_words), examples, X_train_counts)
+            model_precision, model_recall, model_f1 = weighted_average_precision_recall(
+                enc, len(target_words), examples, X_test_counts)
 
             temp_data = pd.DataFrame(
                 {
-                    "Precision": [avg_precision],
-                    "Recall": [avg_recall],
-                    "F1 Score": [f1_score],
+                    "Precision": [train_precision],
+                    "Recall": [train_recall],
+                    "F1 Score": [train_f1],
+                    "Test Precision": [model_precision],
+                    "Test Recall": [model_recall],
+                    "Test F1": [model_f1],
                     "Number of examples": [examples],
                     "Margin": [margin],
                     "Clauses": [clauses],
                     "Specificity": [specificity],
                     "Accumulation": [accumulation],
-                    "Word results": [[word_result]],
+                    "Max_included_literals": [max_num_literal],
                 }
             )
 
-            temp_data.to_csv("results.csv", index=False, header=False, mode="a")
+            temp_data.to_csv("results.csv", index=False,
+                             header=False, mode="a")
 
 
 for parameters in grid_parameters(settings):
@@ -275,4 +341,5 @@ for parameters in grid_parameters(settings):
         parameters["clauses"],
         parameters["specificity"],
         parameters["accumulation"],
+        parameters["max_num_literal"]
     )
